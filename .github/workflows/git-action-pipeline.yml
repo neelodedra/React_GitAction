@@ -1,0 +1,87 @@
+name: Deploy to EC2
+
+on:
+  workflow_dispatch:
+    
+env:
+  EC2_KEY: ${{ secrets.NGINX_WEB_SERVER_PUB_KEY }}
+    
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v2
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v3.8.1
+        with:
+          node-version: 20.x
+        
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Build React App
+        run: npm run build
+        
+      - name: Upload a Build Artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: AppPackage
+          path: build/
+          
+  deployment:
+    needs: build
+    runs-on: ubuntu-latest
+    
+    steps:
+    
+      - name: Download Build Artifact
+        uses: actions/download-artifact@v2.1.1
+        with:
+          name: AppPackage
+          path: deploy_package/
+          
+      - name: List Directories
+        run: |
+          ls -R
+
+      # - name: List Directories
+      #   run: |
+      #     echo ${{ secrets.NGINX_WEB_SERVER_PUB_KEY }}
+
+      # - name: Echo key
+      #   run: echo ${{ env.EC2_KEY }}
+
+      - name: Remove old files on EC2
+        uses: appleboy/ssh-action@master
+        with:
+          host: 13.49.18.144
+          username: ubuntu
+          key: ${{ env.EC2_KEY }}
+          script: |
+            rm -rf /var/www/html/*
+  
+      - name: Transfer ZIP file
+        uses: c0c1/scp-action@v1.0
+        with:
+          host: 13.49.18.144 
+          user: ubuntu
+          key: ${{ env.EC2_KEY }}
+          src: "./deploy_package/*"
+          remote: "/var/www/html"
+
+      - name: Restart Nginx on EC2
+        uses: appleboy/ssh-action@master
+        with:
+          host: 13.49.18.144
+          username: ubuntu
+          key: ${{ env.EC2_KEY }}
+          script: |
+            sudo systemctl restart nginx
+
+        
+          
